@@ -1,4 +1,5 @@
 {
+  "homepage": "https://abelsilvabrandao.github.io/iramais/",
   "name": "iramais-hub",
   "private": true,
   "version": "0.0.0",
@@ -6,21 +7,24 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist"
   },
   "dependencies": {
+    "@google/genai": "^1.32.0",
+    "@vitejs/plugin-react": "^5.1.2",
+    "firebase": "^12.6.0",
+    "lucide-react": "^0.559.0",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
-    "@google/genai": "^1.32.0",
     "react-router-dom": "^7.10.1",
-    "lucide-react": "^0.559.0",
-    "firebase": "^12.6.0",
-    "@vitejs/plugin-react": "^5.1.2",
     "vite": "^7.2.7"
   },
   "devDependencies": {
-    "@types/node": "^22.14.0",
+    "@types/node": "^22.19.3",
     "@vitejs/plugin-react": "^5.0.0",
+    "gh-pages": "^6.3.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }

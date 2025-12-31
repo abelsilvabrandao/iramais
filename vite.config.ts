@@ -8,10 +8,9 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
-    // 'base' define o caminho base relativo. CRUCIAL para GitHub Pages.
-    base: './', 
+    // Configuração para GitHub Pages
+    base: process.env.NODE_ENV === 'production' ? '/iramais/' : '/',
     define: {
-      // Substitui process.env.API_KEY pelo valor real
       'process.env.API_KEY': JSON.stringify(env.API_KEY || ''),
     },
     build: {
