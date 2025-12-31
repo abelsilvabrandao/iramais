@@ -6,7 +6,7 @@ import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/fire
 import { auth, db } from '../services/firebaseConfig';
 import { fetchUnits, fetchDepartments } from '../services/firebaseService';
 import { OrganizationUnit, OrganizationDepartment } from '../types';
-import { Loader2, AlertCircle, CheckCircle2, User, Lock, Mail, Building, MapPin, Phone, Globe } from 'lucide-react';
+import { Loader2, AlertCircle, CheckCircle2, User, Lock, Mail, Building, MapPin, Phone, Globe, Eye, EyeOff } from 'lucide-react';
 import Logo from '../components/Logo';
 import { useAuth } from '../contexts/AuthContext'; // Import useAuth
 
@@ -16,6 +16,7 @@ const Login: React.FC = () => {
   
   const [isRegistering, setIsRegistering] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
@@ -32,9 +33,9 @@ const Login: React.FC = () => {
   const [units, setUnits] = useState<OrganizationUnit[]>([]);
   const [depts, setDepts] = useState<OrganizationDepartment[]>([]);
 
-  // Brand Colors from old system
+  // Brand Colors
   const brandColor = '#006c5b';
-  const bgColor = '#f2f8f4';
+  const bgColor = '#0b1424'; // Alterado para o azul escuro solicitado
 
   // Redirect if already logged in
   useEffect(() => {
@@ -217,8 +218,8 @@ const Login: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 font-sans" style={{ backgroundColor: bgColor }}>
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-[400px] overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center p-4 font-sans transition-colors duration-500" style={{ backgroundColor: bgColor }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[420px] overflow-hidden border border-white/10">
         
         {/* Header */}
         <div className="p-8 pb-6 flex flex-col items-center text-center">
@@ -298,7 +299,7 @@ const Login: React.FC = () => {
                     <select 
                       value={regDept}
                       onChange={(e) => setRegDept(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:bg-white transition-all text-slate-800 appearance-none"
+                      className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:bg-white transition-all text-slate-800 appearance-none"
                       style={{ '--tw-ring-color': brandColor } as React.CSSProperties}
                       required
                     >
@@ -335,14 +336,21 @@ const Login: React.FC = () => {
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                 <input 
-                  type="password" 
+                  type={showPassword ? "text" : "password"} 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:bg-white transition-all text-slate-800"
+                  className="w-full pl-10 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:bg-white transition-all text-slate-800"
                   style={{ '--tw-ring-color': brandColor } as React.CSSProperties}
                   placeholder="••••••••"
                   required
                 />
+                <button 
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-emerald-600 transition-colors"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </div>
               {isRegistering && (
                 <p className="text-[10px] text-slate-400">Mínimo de 6 caracteres.</p>
@@ -353,7 +361,7 @@ const Login: React.FC = () => {
             <button 
               type="submit" 
               disabled={isLoading}
-              className="w-full py-3.5 text-white font-bold text-lg rounded-xl hover:opacity-90 transition-opacity flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/10"
+              className="w-full py-3.5 text-white font-bold text-lg rounded-xl hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-lg hover:shadow-emerald-900/20 active:scale-[0.98]"
               style={{ backgroundColor: brandColor }}
             >
               {isLoading ? (
@@ -372,7 +380,7 @@ const Login: React.FC = () => {
             
             <Link 
               to="/" 
-              className="flex items-center justify-center gap-2 w-full py-2 text-sm font-medium text-emerald-700 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors"
+              className="flex items-center justify-center gap-2 w-full py-2.5 text-sm font-bold text-emerald-700 bg-emerald-50 rounded-xl hover:bg-emerald-100 transition-colors border border-emerald-100"
             >
                <Globe size={16} /> Acessar Portal do Visitante (Sem login)
             </Link>
@@ -381,13 +389,13 @@ const Login: React.FC = () => {
               <button 
                 type="button"
                 onClick={handleForgotPassword}
-                className="text-sm text-slate-500 hover:text-emerald-700 transition-colors mt-4 block mx-auto"
+                className="text-sm text-slate-500 hover:text-emerald-700 font-medium transition-colors mt-4 block mx-auto"
               >
                 Esqueci minha senha
               </button>
             )}
             
-            <div className="pt-3 border-t border-slate-100 mt-2">
+            <div className="pt-4 border-t border-slate-100 mt-4">
               {isRegistering ? (
                 <p className="text-sm text-slate-600">
                   Já possui conta? {' '}

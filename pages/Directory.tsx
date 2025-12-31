@@ -1,8 +1,12 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { fetchEmployees, fetchDepartments, fetchUnits } from '../services/firebaseService';
-import { Search, Phone, Mail, Building2, MessageSquare, Send, X, Minimize2, PhoneCall, ChevronRight, MapPin, Loader2 } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { fetchEmployees, fetchDepartments, fetchUnits, sendChatMessage, deleteChatMessage, markChatAsRead } from '../services/firebaseService';
+import { db } from '../services/firebaseConfig';
+import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
+import { Search, Phone, Mail, Building2, MessageSquare, Send, X, Minimize2, PhoneCall, ChevronRight, MapPin, Loader2, Trash2, Check, CheckCheck } from 'lucide-react';
 import { Employee, ChatMessage, OrganizationDepartment, OrganizationUnit } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 
 // Simple WhatsApp SVG Icon component
 const WhatsAppIcon = ({ size = 18, className = "" }: { size?: number, className?: string }) => (
@@ -11,6 +15,24 @@ const WhatsAppIcon = ({ size = 18, className = "" }: { size?: number, className?
     <path d="M9 10a.5.5 0 0 0 1 0V9a.5.5 0 0 0-1 0v1a5 5 0 0 0 5 5h1a.5.5 0 0 0 0-1h-1a.5.5 0 0 0 0 1" />
   </svg>
 );
+
+const formatRoleName = (name: string) => {
+  if (!name) return '';
+  const particles = ['de', 'do', 'da', 'dos', 'das', 'e', 'em', 'com', 'para'];
+  const romanNumerals = ['i', 'ii', 'iii', 'iv', 'v', 'vi', 'vii', 'viii', 'ix', 'x'];
+  const acronyms = ['ti', 'rh', 'sesmt', 'dp', 'it', 'ceo', 'cfo', 'coo', 'cto', 'adm', 'qhse', 'comex'];
+  
+  return name
+    .toLowerCase()
+    .split(' ')
+    .filter(word => word.length > 0)
+    .map((word, index) => {
+      if (index > 0 && particles.includes(word)) return word;
+      if (romanNumerals.includes(word) || acronyms.includes(word)) return word.toUpperCase();
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    })
+    .join(' ');
+};
 
 // --- Componente Deslizante para Ligar ---
 const SwipeToCall = ({ extension }: { extension: string }) => {
@@ -105,6 +127,10 @@ const SwipeToCall = ({ extension }: { extension: string }) => {
 };
 
 const Directory: React.FC = () => {
+  const { currentUser, globalSettings } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departmentsList, setDepartmentsList] = useState<OrganizationDepartment[]>([]);
   const [unitsList, setUnitsList] = useState<OrganizationUnit[]>([]);
@@ -119,7 +145,7 @@ const Directory: React.FC = () => {
   const [activeChat, setActiveChat] = useState<Employee | null>(null);
   const [isChatMinimized, setIsChatMinimized] = useState(false);
   const [messageInput, setMessageInput] = useState('');
-  const [chatHistory, setChatHistory] = useState<Record<string, ChatMessage[]>>({});
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // Load Data
@@ -140,66 +166,110 @@ const Directory: React.FC = () => {
     init();
   }, []);
 
+  // Handle navigation from notification to open chat
+  useEffect(() => {
+    if (employees.length > 0 && location.state && (location.state as any).openChatWith) {
+      const targetId = (location.state as any).openChatWith;
+      const targetEmployee = employees.find(e => e.id === targetId);
+      
+      if (targetEmployee) {
+        handleOpenChat(targetEmployee);
+        // Clear state to prevent reopening on refresh
+        navigate(location.pathname, { replace: true, state: {} });
+      }
+    }
+  }, [employees, location.state, navigate, location.pathname]);
+
+  // Listen to Messages when Chat is Open
+  useEffect(() => {
+    if (!activeChat || !currentUser) return;
+
+    // Trigger mark as read whenever chat is open and receiving messages
+    const markRead = () => {
+        markChatAsRead(currentUser.id, activeChat.id);
+    };
+    markRead();
+
+    // REQUIRES INDEX: participants ARRAY_CONTAINS, timestamp ASC
+    const q = query(
+      collection(db, "messages"),
+      where("participants", "array-contains", currentUser.id),
+      orderBy("timestamp", "asc")
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const allMsgs = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as ChatMessage[];
+
+      // Filter for current conversation client-side
+      const conversation = allMsgs.filter(m => 
+        (m.senderId === currentUser.id && m.receiverId === activeChat.id) ||
+        (m.senderId === activeChat.id && m.receiverId === currentUser.id)
+      );
+      
+      setMessages(conversation);
+      
+      // Also mark as read when new messages arrive while chat is open
+      if (!isChatMinimized) {
+         markRead();
+      }
+    });
+
+    return () => unsubscribe();
+  }, [activeChat, currentUser, isChatMinimized]);
+
+  // Auto-scroll to bottom
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, activeChat, isChatMinimized]);
+
   const filteredEmployees = employees.filter(emp => {
     const matchesSearch = emp.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           (emp.extension && emp.extension.includes(searchTerm)) ||
                           emp.role.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesDept = deptFilter === 'All' || emp.department === deptFilter;
     const matchesUnit = unitFilter === 'All' || (emp.unit && emp.unit === unitFilter);
-    
+    // Don't show self in list if desired, or show
     return matchesSearch && matchesDept && matchesUnit;
   });
 
   const cleanWhatsAppNumber = (phone: string) => phone.replace(/\D/g, '');
 
-  // --- Chat Logic ---
   const handleOpenChat = (employee: Employee) => {
+    if (employee.id === currentUser?.id) {
+        alert("Você não pode conversar consigo mesmo.");
+        return;
+    }
     setActiveChat(employee);
     setIsChatMinimized(false);
-    if (!chatHistory[employee.id]) {
-        setChatHistory(prev => ({
-            ...prev,
-            [employee.id]: [
-                { id: 'sys-1', senderId: employee.id, text: `Olá, sou ${employee.name.split(' ')[0]}. Como posso ajudar?`, timestamp: new Date() }
-            ]
-        }));
+  };
+
+  const handleSendMessage = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!messageInput.trim() || !activeChat || !currentUser) return;
+
+    const text = messageInput;
+    setMessageInput(''); // Clear immediately for UX
+
+    try {
+        await sendChatMessage(currentUser.id, activeChat.id, text, currentUser.name);
+    } catch (error) {
+        console.error("Failed to send message", error);
+        alert("Erro ao enviar mensagem.");
     }
   };
 
-  const handleSendMessage = (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!messageInput.trim() || !activeChat) return;
-
-    const newMessage: ChatMessage = {
-        id: Date.now().toString(),
-        senderId: 'me',
-        text: messageInput,
-        timestamp: new Date()
-    };
-
-    setChatHistory(prev => ({
-        ...prev,
-        [activeChat.id]: [...(prev[activeChat.id] || []), newMessage]
-    }));
-    setMessageInput('');
-
-    setTimeout(() => {
-        const reply: ChatMessage = {
-            id: (Date.now() + 1).toString(),
-            senderId: activeChat.id,
-            text: "Recebi sua mensagem! Estou verificando aqui e já te retorno.",
-            timestamp: new Date()
-        };
-        setChatHistory(prev => ({
-            ...prev,
-            [activeChat.id]: [...(prev[activeChat.id] || []), reply]
-        }));
-    }, 2500);
+  const handleDeleteMessage = async (messageId: string) => {
+    if (confirm("Deseja apagar esta mensagem para todos?")) {
+        try {
+            await deleteChatMessage(messageId);
+        } catch (error) {
+            alert("Erro ao apagar mensagem.");
+        }
+    }
   };
-
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatHistory, activeChat, isChatMinimized]);
 
   if (isLoading) return <div className="flex justify-center p-12 text-slate-500"><Loader2 className="animate-spin mr-2" /> Carregando ramais...</div>;
 
@@ -261,8 +331,8 @@ const Directory: React.FC = () => {
             </div>
             
             <h3 className="font-bold text-lg text-slate-900">{emp.name}</h3>
-            {emp.showRole !== false && (
-              <p className="text-emerald-600 text-sm font-medium mb-1">{emp.role}</p>
+            {globalSettings?.showRoleInternal && emp.showRole !== false && (
+              <p className="text-emerald-600 text-sm font-medium mb-1">{formatRoleName(emp.role)}</p>
             )}
             
             <div className="flex flex-col items-center gap-1 mb-4">
@@ -326,68 +396,109 @@ const Directory: React.FC = () => {
 
       {/* --- Floating Chat Window --- */}
       {activeChat && (
-        <div className={`fixed bottom-0 right-4 w-80 bg-white rounded-t-xl shadow-2xl border border-slate-200 z-50 flex flex-col transition-all duration-300 ${isChatMinimized ? 'h-14' : 'h-[450px]'}`}>
+        <div className={`fixed bottom-0 right-4 w-96 bg-white rounded-t-xl shadow-2xl border border-slate-200 z-50 flex flex-col transition-all duration-300 ${isChatMinimized ? 'h-14' : 'h-[500px]'}`}>
             <div 
-                className="bg-emerald-600 text-white p-3 rounded-t-xl flex items-center justify-between cursor-pointer"
+                className="bg-emerald-700 text-white p-3 rounded-t-xl flex items-center justify-between cursor-pointer"
                 onClick={() => setIsChatMinimized(!isChatMinimized)}
             >
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                     <div className="relative">
-                        <img src={activeChat.avatar} alt="" className="w-8 h-8 rounded-full border border-white/30" />
-                        <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 rounded-full border border-emerald-600"></div>
+                        <img src={activeChat.avatar} alt="" className="w-9 h-9 rounded-full border border-white/30" />
+                        <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 rounded-full border border-emerald-900"></div>
                     </div>
                     <div>
                         <p className="text-sm font-bold leading-tight">{activeChat.name}</p>
-                        <p className="text-[10px] text-emerald-100 leading-tight">{activeChat.role}</p>
+                        <p className="text-[10px] text-emerald-100 leading-tight opacity-80">{activeChat.role}</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-1">
-                    <button className="p-1 hover:bg-emerald-700 rounded"><Minimize2 size={14}/></button>
+                    <button className="p-1 hover:bg-emerald-600 rounded"><Minimize2 size={16}/></button>
                     <button 
                         onClick={(e) => { e.stopPropagation(); setActiveChat(null); }} 
-                        className="p-1 hover:bg-emerald-700 rounded"
+                        className="p-1 hover:bg-emerald-600 rounded"
                     >
-                        <X size={14}/>
+                        <X size={16}/>
                     </button>
                 </div>
             </div>
 
             {!isChatMinimized && (
                 <>
-                    <div className="flex-1 bg-slate-50 p-4 overflow-y-auto custom-scrollbar flex flex-col gap-3">
-                        <div className="text-center text-xs text-slate-400 my-2">
+                    {/* Chat Background Image Effect */}
+                    <div className="flex-1 bg-[#e5ddd5] p-4 overflow-y-auto custom-scrollbar flex flex-col gap-2 relative">
+                        <div className="absolute inset-0 opacity-10 bg-[url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png')] pointer-events-none"></div>
+                        
+                        <div className="text-center text-[10px] bg-white/50 self-center rounded-full px-3 py-1 text-slate-500 my-2 shadow-sm z-10 backdrop-blur-sm">
                             Início da conversa com {activeChat.name}
                         </div>
-                        {chatHistory[activeChat.id]?.map((msg) => (
-                            <div 
-                                key={msg.id} 
-                                className={`max-w-[85%] p-3 rounded-2xl text-sm ${
-                                    msg.senderId === 'me' 
-                                    ? 'bg-emerald-600 text-white self-end rounded-br-none' 
-                                    : 'bg-white border border-slate-200 text-slate-700 self-start rounded-bl-none shadow-sm'
-                                }`}
-                            >
-                                <p>{msg.text}</p>
-                                <p className={`text-[9px] mt-1 text-right ${msg.senderId === 'me' ? 'text-emerald-200' : 'text-slate-400'}`}>
-                                    {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                </p>
-                            </div>
-                        ))}
+                        
+                        {messages.length === 0 && (
+                            <p className="text-center text-xs text-slate-400 italic mt-4 z-10">Nenhuma mensagem ainda.</p>
+                        )}
+                        
+                        {messages.map((msg) => {
+                            const isMe = msg.senderId === currentUser?.id;
+                            return (
+                                <div 
+                                    key={msg.id} 
+                                    className={`relative max-w-[80%] p-2 px-3 rounded-lg text-sm shadow-sm group z-10 ${
+                                        isMe 
+                                        ? 'bg-[#dcf8c6] self-end rounded-tr-none' 
+                                        : 'bg-white self-start rounded-tl-none'
+                                    }`}
+                                >
+                                    {/* Botão de deletar (só aparece no hover para mensagens do próprio usuário) */}
+                                    {isMe && !msg.deleted && (
+                                        <button 
+                                            onClick={() => handleDeleteMessage(msg.id)}
+                                            className="absolute -top-2 -left-2 bg-white text-red-500 rounded-full p-1 shadow-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50"
+                                            title="Apagar mensagem"
+                                        >
+                                            <Trash2 size={12} />
+                                        </button>
+                                    )}
+
+                                    {msg.deleted ? (
+                                        <div className="flex items-center gap-1 text-slate-400 italic text-xs py-1">
+                                            <span className="block">🚫 Mensagem apagada</span>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <p className="text-slate-800 leading-snug whitespace-pre-wrap">{msg.text}</p>
+                                            <div className="flex items-center justify-end gap-1 mt-1 select-none">
+                                                <span className="text-[9px] text-slate-500">
+                                                    {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                </span>
+                                                {isMe && (
+                                                    <span title={msg.read ? "Lida" : "Enviada"}>
+                                                        {msg.read ? (
+                                                            <CheckCheck size={14} className="text-blue-500" />
+                                                        ) : (
+                                                            <Check size={14} className="text-slate-400" />
+                                                        )}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            );
+                        })}
                         <div ref={chatEndRef} />
                     </div>
 
-                    <form onSubmit={handleSendMessage} className="p-3 bg-white border-t border-slate-100 flex gap-2">
+                    <form onSubmit={handleSendMessage} className="p-3 bg-[#f0f0f0] border-t border-slate-200 flex gap-2 z-20">
                         <input 
                             type="text" 
                             value={messageInput}
                             onChange={(e) => setMessageInput(e.target.value)}
                             placeholder="Digite uma mensagem..."
-                            className="flex-1 bg-slate-100 border-none rounded-full px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 text-slate-900"
+                            className="flex-1 bg-white border border-slate-300 rounded-full px-4 py-2 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-slate-900"
                         />
                         <button 
                             type="submit" 
                             disabled={!messageInput.trim()}
-                            className="p-2 bg-emerald-600 text-white rounded-full hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            className="p-2.5 bg-emerald-600 text-white rounded-full hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
                         >
                             <Send size={18} />
                         </button>

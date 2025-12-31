@@ -2,17 +2,20 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { auth, db } from '../services/firebaseConfig';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { Employee, UserRole } from '../types';
+import { collection, query, where, onSnapshot, doc } from 'firebase/firestore';
+import { Employee, UserRole, GlobalSettings } from '../types';
+import { Loader2 } from 'lucide-react';
 
 interface AuthContextType {
   currentUser: Employee | null;
-  user: User | null; // Objeto raw do Firebase Auth
+  user: User | null; 
   loading: boolean;
   logout: () => Promise<void>;
   isAdmin: boolean;
+  isMaster: boolean;
   isCommunication: boolean;
   refreshUser: () => Promise<void>;
+  globalSettings: GlobalSettings | null;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -21,8 +24,10 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   logout: async () => {},
   isAdmin: false,
+  isMaster: false,
   isCommunication: false,
-  refreshUser: async () => {}
+  refreshUser: async () => {},
+  globalSettings: null
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -30,19 +35,36 @@ export const useAuth = () => useContext(AuthContext);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [currentUser, setCurrentUser] = useState<Employee | null>(null);
+  const [globalSettings, setGlobalSettings] = useState<GlobalSettings | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Escuta Configurações Globais
+    const unsubSettings = onSnapshot(doc(db, "settings", "general"), (docSnap) => {
+      if (docSnap.exists()) {
+        setGlobalSettings(docSnap.data() as GlobalSettings);
+      } else {
+        setGlobalSettings({
+          publicDirectory: true,
+          showBirthdaysPublicly: true,
+          showRoomsPublicly: true,
+          showNewsPublicly: true,
+          showRolePublicly: true,
+          showWelcomeSection: true,
+          dashboardShowRooms: true,
+          dashboardShowNews: true,
+          dashboardShowBirthdays: true,
+          showRoleInternal: true
+        });
+      }
+    });
+
     let unsubscribeSnapshot: (() => void) | null = null;
 
-    // O onAuthStateChanged é disparado automaticamente quando o Firebase restaura a sessão do LocalStorage/IndexedDB
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
 
       if (firebaseUser) {
-        // Usuário autenticado, agora buscamos os dados do perfil no Firestore
-        // Mantemos loading = true enquanto buscamos os dados extras
-        
         if (unsubscribeSnapshot) {
           unsubscribeSnapshot();
         }
@@ -66,10 +88,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               avatar: data.photoBase64 || data.photoUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name)}&background=0d9488&color=fff`,
               birthday: data.birthday,
               showRole: data.showRole ?? true,
-              showInPublicDirectory: data.showInPublicDirectory ?? true
+              showInPublicDirectory: data.showInPublicDirectory ?? true,
+              signatureImage: data.signatureImage || '' 
             } as Employee);
           } else {
-            // Fallback: Usuário autenticado no Auth mas sem perfil no Firestore (ex: Admin criou manual)
             setCurrentUser({
                 id: 'temp',
                 uid: firebaseUser.uid,
@@ -81,24 +103,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 extension: '',
                 whatsapp: '',
                 avatar: firebaseUser.photoURL || '',
-                birthday: ''
+                birthday: '',
+                signatureImage: ''
             } as Employee);
           }
-          // Só removemos o loading após ter os dados do Firestore
           setLoading(false);
         }, (error) => {
           console.error("Error fetching user profile:", error);
-          // Em caso de erro no banco, ainda liberamos o app (talvez para uma tela de erro ou perfil incompleto)
           setLoading(false);
         });
       } else {
-        // Não autenticado
         setCurrentUser(null);
         setLoading(false);
       }
     });
 
     return () => {
+      unsubSettings();
       unsubscribeAuth();
       if (unsubscribeSnapshot) unsubscribeSnapshot();
     };
@@ -114,12 +135,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
      console.log("User refresh requested (handled by realtime listener)");
   }, []);
 
-  const isAdmin = currentUser?.systemRole === UserRole.ADMIN;
+  const isMaster = currentUser?.systemRole === UserRole.MASTER;
+  const isAdmin = currentUser?.systemRole === UserRole.ADMIN || isMaster;
   const isCommunication = currentUser?.systemRole === UserRole.COMMUNICATION || isAdmin;
 
+  if (loading) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
+        <Loader2 className="animate-spin text-emerald-600" size={48} />
+        <div className="flex flex-col items-center">
+           <p className="text-slate-700 font-semibold text-lg">Iniciando iRamais Hub...</p>
+           <p className="text-slate-400 text-sm">Conectando ao sistema</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <AuthContext.Provider value={{ currentUser, user, loading, logout, isAdmin, isCommunication, refreshUser }}>
-      {!loading && children}
+    <AuthContext.Provider value={{ currentUser, user, loading, logout, isAdmin, isMaster, isCommunication, refreshUser, globalSettings }}>
+      {children}
     </AuthContext.Provider>
   );
 };

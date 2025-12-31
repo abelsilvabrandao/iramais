@@ -194,15 +194,18 @@ export const MOCK_TASKS: Task[] = [
   }
 ];
 
+// Fix: Added missing required properties authorUid and isPublic for NewsArticle interface
 export const MOCK_NEWS: NewsArticle[] = [
   {
     id: 'n5',
     title: 'Comunicado – Reajuste no Plano Odontológico MetLife',
     author: 'RH',
+    authorUid: 'admin-rh-uid',
     date: '2023-11-24T09:00:00',
     category: 'Institucional',
     thumbnail: 'http://intranet.intermaritima.com.br/wp-content/uploads/2025/12/Comunicado-5-819x1024.jpg',
     published: true,
+    isPublic: true,
     externalUrl: 'http://intranet.intermaritima.com.br/?p=6107',
     blocks: [
       {
@@ -217,10 +220,12 @@ export const MOCK_NEWS: NewsArticle[] = [
     id: 'n4',
     title: 'Treinamento Obrigatório de Segurança',
     author: 'SESMT',
+    authorUid: 'admin-sesmt-uid',
     date: '2023-11-23T14:30:00',
     category: 'Segurança',
     thumbnail: 'https://picsum.photos/id/180/800/400',
     published: true,
+    isPublic: true,
     blocks: [
       {
         id: 'b1',
@@ -234,10 +239,12 @@ export const MOCK_NEWS: NewsArticle[] = [
     id: 'n3',
     title: 'Confraternização de Final de Ano',
     author: 'RH',
+    authorUid: 'admin-rh-uid',
     date: '2023-11-22T10:00:00',
     category: 'Eventos',
     thumbnail: 'https://picsum.photos/id/250/800/400',
     published: true,
+    isPublic: true,
     blocks: [
       {
         id: 'b1',
@@ -251,10 +258,12 @@ export const MOCK_NEWS: NewsArticle[] = [
     id: 'n2',
     title: 'Manutenção Programada nos Servidores',
     author: 'TI',
+    authorUid: 'admin-ti-uid',
     date: '2023-11-20T18:00:00',
     category: 'TI',
     thumbnail: 'https://picsum.photos/id/0/800/400',
     published: true,
+    isPublic: true,
     blocks: [
       {
         id: 'b1',
@@ -268,10 +277,12 @@ export const MOCK_NEWS: NewsArticle[] = [
     id: 'n1',
     title: 'Novo Plano de Saúde',
     author: 'RH',
+    authorUid: 'admin-rh-uid',
     date: '2023-10-25T08:00:00',
     category: 'RH',
     thumbnail: 'https://picsum.photos/id/48/800/400',
     published: true,
+    isPublic: true,
     blocks: [
       {
         id: 'b1',
@@ -291,10 +302,12 @@ export const MOCK_NEWS: NewsArticle[] = [
     id: 'n6',
     title: 'Resultados Financeiros Q3',
     author: 'Financeiro',
+    authorUid: 'admin-fin-uid',
     date: '2023-11-12T16:45:00',
     category: 'Financeiro',
     thumbnail: 'https://picsum.photos/id/160/800/400',
     published: true,
+    isPublic: true,
     blocks: [
       {
         id: 'b1',

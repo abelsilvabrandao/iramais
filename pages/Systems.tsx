@@ -54,7 +54,7 @@ const Systems: React.FC = () => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-            <LayoutGrid className="text-emerald-600" /> Meus Sistemas
+            <LayoutGrid className="text-emerald-600" /> Meus Sistemas & Links
           </h2>
           <p className="text-slate-500 text-sm mt-1">
             Exibindo ferramentas liberadas para: <span className="font-bold text-emerald-700">{currentUser.department}</span>
