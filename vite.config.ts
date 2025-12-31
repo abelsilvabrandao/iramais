@@ -1,6 +1,5 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
-import { resolve } from 'path';
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -9,28 +8,16 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
-    // Configuração para GitHub Pages
-    base: '/iramais/',
+    // 'base' define o caminho base relativo. CRUCIAL para GitHub Pages.
+    base: './', 
     define: {
-      'process.env': {}
-    },
-    resolve: {
-      alias: {
-        '@': resolve(__dirname, './src')
-      }
+      // Substitui process.env.API_KEY pelo valor real
+      'process.env.API_KEY': JSON.stringify(env.API_KEY || ''),
     },
     build: {
       outDir: 'dist',
       assetsDir: 'assets',
-      sourcemap: false,
-      rollupOptions: {
-        output: {
-          manualChunks: {
-            react: ['react', 'react-dom', 'react-router-dom'],
-            vendor: ['lucide-react']
-          }
-        }
-      }
+      sourcemap: false
     }
   };
 });
